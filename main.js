@@ -222,7 +222,12 @@
   /** Only metadata leaves the plugin: never the executable path or a command. */
   function harnessEntry(result) {
     var entry = { id: HARNESS_ID, available: result.available === true && !signInRequired };
-    if (entry.available) entry.reportsUsage = true;
+    if (entry.available) {
+      entry.reportsUsage = true;
+      // Cindy may show agy's one login (worker `accountStatus`). No sign-in methods: agy keeps a single
+      // Google sign-in per computer, so Cindy cannot add Antigravity accounts. Older Cindy drops the field.
+      entry.accounts = { methods: [] };
+    }
     if (entry.available && supportsRemoteWorkspace(result.version)) {
       entry.remoteWorkspace = true;
       entry.guestWorkspace = true;
@@ -859,9 +864,20 @@
     }
   });
 
+  /**
+   * The worker's accountStatus resumes the model-list session for the tier, from its own record. A
+   * plugin upgraded from 0.4.x has that session only in /kv, and start-up skips the listing when a list
+   * was saved: hand it over (the worker keeps one it already has). Starts no agy.
+   */
+  function shareModelSession() {
+    if (!modelSessionId) return Promise.resolve();
+    return nodeCall('adoptModelSession', { params: { sessionId: modelSessionId }, timeoutMs: 10000 });
+  }
+
   // Start-up: republish with the saved model list; list from agy only when none was saved yet.
   stateLoaded
     .then(refreshLocale)
     .then(detect)
-    .then(function () { return refreshModels('if-missing'); });
+    .then(function () { return refreshModels('if-missing'); })
+    .then(shareModelSession);
 })();
